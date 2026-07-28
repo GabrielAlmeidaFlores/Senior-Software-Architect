@@ -121,6 +121,8 @@ These labels are workload and configuration sensitive; treat them as default ten
 | DynamoDB | A/C configurable per operation | L/C configurable by consistency mode | Pragmatically tunable; many workloads run near **PA/EL** |
 | MongoDB (Replica Set) | Usually C on majority writes | Mix: primary reads favor C, secondary reads favor L | Often **PC/EC** for majority-write + primary-read |
 | PostgreSQL (single primary + replicas) | C on primary writes, A reduced on failover events | C for primary, L for async replicas | Not a symmetric multi-primary design; trade-off is topology-driven |
+| CockroachDB | C over A | C over L | **PC/EC** via per-range Raft consensus |
+| Redis (Sentinel/async replicas) | Config-dependent; often A-leaning for serving continuity | L over C for local/cache paths | Speed-layer posture; not default strict SoR |
 
 ### 5.1 Spanner
 

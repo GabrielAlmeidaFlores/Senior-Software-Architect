@@ -11,6 +11,7 @@ This masterclass is a multi-document reference for senior-level database archite
 - [CAP and PACELC Theorems](./01-theory-and-foundations/01-cap-pacelc-theorems.md)
 - [ACID vs BASE Models](./01-theory-and-foundations/02-acid-vs-base-models.md)
 - [Consensus, 2PC, and Distributed Transactions](./01-theory-and-foundations/03-consensus-2pc-and-distributed-transactions.md)
+- [Quorum, Raft, and Paxos Internals](./01-theory-and-foundations/04-quorum-raft-paxos-internals.md)
 
 ### 02 Relational Engines
 
@@ -26,6 +27,7 @@ This masterclass is a multi-document reference for senior-level database archite
 - [Columnar Databases and OLAP Architecture](./03-nosql-paradigms/03-columnar-databases-and-olap-architecture.md)
 - [Key-Value Architecture and Design Decisions](./03-nosql-paradigms/04-key-value-architecture-and-design-decisions.md)
 - [Graph Databases and Traversal Workloads](./03-nosql-paradigms/05-graph-databases-and-traversal-workloads.md)
+- [Cassandra, CockroachDB, Redis, and PACELC Mapping](./03-nosql-paradigms/06-cassandra-cockroachdb-redis-and-pacelc-mapping.md)
 
 ### 04 Architectural Decision Framework
 
