@@ -66,6 +66,13 @@ Key domains:
 
 This is the current primary learning track. New tracks will be added incrementally.
 
+Depth profile for this and future tracks:
+
+- theory-heavy writing with explicit mechanism-level explanations
+- deliberate repetition of critical concepts when it improves understanding
+- clear trade-offs, failure domains, and operational implications
+- visual support (Mermaid and high-quality references) for complex ideas
+
 ---
 
 ## Planned Next Tracks

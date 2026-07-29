@@ -1,145 +1,144 @@
-# MongoDB Architecture: WiredTiger, Replication, and Sharding
+# MongoDB Architecture: WiredTiger Internals, Replication Semantics, and Sharding Consequences
 
-## 1. WiredTiger Engine Internals
+## 1. Why MongoDB Needs Architectural, Not Superficial, Evaluation
 
-WiredTiger underpins modern MongoDB storage behavior.
+MongoDB is often chosen for schema flexibility, but senior-level selection requires evaluating replication semantics, shard-key design, cache behavior, and operational consistency policy.
 
-Core mechanics:
+---
 
-- B-Tree-like structures for collections and indexes.
-- Document-level concurrency controls (with engine and lock manager coordination).
-- Compression (Snappy/Zstd configurable) to reduce storage and IO.
-- Checkpointing and journaling for durability/recovery.
+## 2. WiredTiger Core Mechanics
 
-Memory model:
+WiredTiger provides:
 
-- WiredTiger cache (default percentage of RAM) plus OS page cache interactions.
-- Working set fit strongly determines tail latency.
+- B-tree-oriented data/index structures
+- compression support for storage and IO efficiency
+- journaled durability path
+- cache management separate from OS page cache concerns
 
 ```mermaid
 flowchart LR
-    Q[Client Ops] --> M[MongoDB Query Layer]
-    M --> WT[WiredTiger]
-    WT --> CACHE[WT Cache]
-    WT --> JOURNAL[Journal/WAL-like durability log]
-    WT --> DATA[Data + Index Files]
+    queryLayer[MongoQueryLayer] --> wiredTiger[WiredTigerEngine]
+    wiredTiger --> wtCache[WiredTigerCache]
+    wiredTiger --> journal[Journal]
+    wiredTiger --> dataFiles[DataAndIndexFiles]
 ```
 
-#### In-Line Glossary: Document-Level Locking
+### 2.1 Cache and Working Set Dynamics
 
-**What it is:** Concurrency model where conflicting operations lock at finer granularity than collection-level, reducing contention for unrelated documents.  
-**Why here:** High-throughput OLTP-like workloads benefit from narrow conflict scope.  
-**Systemic impact:** Better concurrency than coarse locks, but hotspots still occur on popular documents and unique index paths.
+Performance depends on working-set fit relative to cache budget.
 
----
+Failure symptom:
 
-## 2. Replica Sets and Elections
+- cache miss escalation increases storage IO and p99 latency.
 
-Replica set topology:
+#### In-Line Glossary: Working Set
 
-- Primary accepts writes.
-- Secondaries replicate via oplog.
-- Arbiters optional for voting (no data copy).
-
-Election protocol behavior:
-
-- Node heartbeat monitors health.
-- Eligible secondary can become primary on timeout/quorum conditions.
-- Majority write concern improves durability/consistency semantics.
-
-Failure trade-off:
-
-- Failover introduces brief write unavailability.
-- Read preference to secondaries can reduce latency but risks stale reads.
-
-#### In-Line Glossary: Oplog
-
-**What it is:** Ordered operation log used by secondaries to replicate primary changes.  
-**Why here:** Replication lag and rollback risk are directly tied to oplog apply behavior and retention window.  
-**Systemic impact:** Oplog sizing affects recovery survivability when secondaries are temporarily disconnected.
+**What it is:** subset of data and indexes actively used over a time window.  
+**Why here:** if working set does not fit memory envelope, latency behavior degrades sharply.  
+**Systemic implication:** memory sizing and index discipline are architecture concerns, not mere tuning details.
 
 ---
 
-## 3. Sharded Cluster Distribution
+## 3. Replica Set Semantics
 
-Main components:
+Replica set roles:
 
-- `mongos` query routers
-- config servers (metadata authority)
-- shards (replica sets storing chunk subsets)
+- primary for writes
+- secondaries for replication and optional reads
+- election mechanism for leadership failover
 
-### 3.1 Chunking and Balancing
+### 3.1 Election and Consistency Impact
 
-- Data partitioned by shard key into chunks.
-- Balancer migrates chunks to equalize load/storage.
-- Poor shard keys produce hotspots and jumbo chunks.
+- majority write concern improves durability confidence
+- secondary reads can reduce latency but introduce staleness risk
+- failover introduces brief write unavailability windows
+
+#### In-Line Glossary: Write Concern
+
+**What it is:** acknowledgment policy defining how many nodes must confirm a write before success is returned.  
+**Why here:** it is the main knob controlling durability-vs-latency behavior.  
+**Systemic implication:** endpoint-level write concern decisions should map to business criticality.
+
+---
+
+## 4. Sharding Architecture and Distribution Risks
+
+Sharded deployments include:
+
+- `mongos` routers
+- config server replica set
+- shard replica sets
 
 ```mermaid
 flowchart TD
-    A[Client] --> B[mongos Router]
-    B --> C1[Shard 1 RS]
-    B --> C2[Shard 2 RS]
-    B --> C3[Shard 3 RS]
-    B --> D[Config Server RS]
+    client[Client] --> mongos[MongoSRouter]
+    mongos --> shardA[ShardAReplicaSet]
+    mongos --> shardB[ShardBReplicaSet]
+    mongos --> shardC[ShardCReplicaSet]
+    mongos --> configRS[ConfigServerReplicaSet]
 ```
 
-### 3.2 Chunk Migration Path
+### 4.1 Chunk and Balancer Behavior
 
-1. Balancer identifies imbalance.
-2. Destination shard clones chunk data.
-3. Catch-up phase applies diffs.
-4. Metadata commit updates ownership.
-5. Source cleans orphaned ranges.
+- data partitioned into chunks by shard key
+- balancer migrates chunks to maintain distribution
 
-Operational caution:
+Risks:
 
-- Migration competes for IO/CPU with production workload.
-- Must monitor migration windows and queue depth.
+- poor shard key creates hotspots and jumbo chunk behavior
+- migrations consume resources and can impact p99 under heavy load
 
 ---
 
-## 4. Schema Design: Anti-Patterns and Good Patterns
+## 5. Schema Design: Deep Trade-offs
 
-## 4.1 Anti-Patterns
+### 5.1 Embed vs Reference
 
-- Unbounded arrays in a single document (explosive growth).
-- Embedding high-cardinality frequently updated subdocuments causing write amplification.
-- Cross-shard fan-out queries from poor shard key choice.
+Embed when:
 
-## 4.2 Preferred Patterns
+- cardinality bounded
+- lifecycle strongly coupled
 
-- Embed tightly bounded one-to-few relationships.
-- Reference when cardinality is unbounded or lifecycle differs.
-- Choose shard key with high cardinality, even distribution, and query locality.
+Reference when:
 
-#### In-Line Glossary: Cardinality (Shard Key)
+- cardinality unbounded
+- independent lifecycle and update frequency
 
-**What it is:** Number of distinct values available for distribution.  
-**Why here:** Low-cardinality keys collapse traffic into few shards, creating hotspots.  
-**Systemic impact:** Key choice can dominate cluster scalability more than hardware upgrades.
+### 5.2 Anti-patterns
 
----
-
-## 5. Consistency and Transaction Semantics
-
-MongoDB supports multi-document ACID transactions, but architects should use them selectively:
-
-- Transactions increase coordination and memory overhead.
-- Best performance comes from schema designs where most writes are single-document atomic operations.
-
-Consistency controls:
-
-- read concern levels (`local`, `majority`, `snapshot`)
-- write concern levels (`w:1`, `majority`, custom)
-
-These settings should be endpoint-specific, not globally fixed.
+- unbounded arrays in single document
+- high-churn massive nested objects
+- shard key with low cardinality or monotonic insertion hotspot
 
 ---
 
-## 6. Operational Playbook
+## 6. Transactions in MongoDB
 
-1. Keep shard key decision as an architecture milestone, not an implementation detail.
-2. Track replica lag, cache pressure, lock percentages, and chunk migration activity.
-3. Use majority write concern where data loss risk is unacceptable.
-4. Tune working set and index footprint to fit memory budget.
-5. Validate failover and re-election behavior under realistic traffic before production launch.
+MongoDB supports multi-document transactions, but cost profile matters.
+
+Guidance:
+
+- prefer single-document atomic boundaries where feasible
+- use multi-document transactions for true invariant requirements, not convenience
+
+---
+
+## 7. Operational Decision Guidance
+
+Use MongoDB when:
+
+- document model and schema evolution are dominant product needs
+- read/write patterns align with shard key and document boundaries
+- team is ready to manage replication and sharding operationally
+
+Avoid MongoDB-first when:
+
+- strict relational invariants dominate across many entities
+- query requirements are heavily join-centric and strongly transactional
+
+---
+
+## 8. External References
+
+- [MongoDB Architecture](https://www.mongodb.com/docs/manual/core/)
+- [WiredTiger Documentation](https://source.wiredtiger.com/)

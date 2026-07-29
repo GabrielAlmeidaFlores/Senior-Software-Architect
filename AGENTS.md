@@ -46,6 +46,24 @@ To improve comprehension, the AI must include visual support whenever it materia
 - When possible, pair complex textual explanations with at least one Mermaid diagram.
 - Keep diagrams and nearby text synchronized as documents evolve.
 
+## 3.2) Mandatory Depth and Writing Pattern for All Future Docs
+
+For any new or updated technical documentation, the AI must follow the same deep-writing pattern used in the database masterclass.
+
+Required default pattern:
+
+- Start with explicit purpose and decision context.
+- Explain concepts with mechanism-level detail, not only definitions.
+- Include invariants, assumptions, and boundary conditions.
+- Add trade-off analysis (benefits, costs, and rejected alternatives).
+- Document failure modes, degradation behavior, and recovery implications.
+- Add operational consequences (SLO impact, observability, maintainability, cost pressure).
+- Use in-line glossary callouts for advanced terms.
+- Prefer theory-heavy depth with formal or quantitative reasoning when applicable.
+- Allow deliberate repetition of critical ideas when it improves clarity and retention.
+
+This pattern is mandatory for current and future domains (for example, databases, Linux, cloud, networking, platform engineering, reliability, and security).
+
 ## 4) Required Runtime Behavior for Every Task
 
 For every task in this repository, the AI must:
@@ -64,6 +82,7 @@ The AI must keep `docs/ai-knowledge-base/` continuously maintainable:
 - Preserve historical context when decisions evolve (superseded decisions should be marked, not silently erased).
 - Keep terminology consistent across files.
 - Ensure that new documents include context, rationale, and practical implications.
+- Ensure documentation depth remains consistent with section `3.2` and does not regress into shallow summaries.
 
 ## 6) Priority and Conflict Resolution
 

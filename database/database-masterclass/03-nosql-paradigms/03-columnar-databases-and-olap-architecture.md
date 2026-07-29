@@ -1,105 +1,109 @@
-# Columnar Databases and OLAP Architecture Decisions
+# Columnar Databases and OLAP Architecture: Internal Mechanics and Selection Consequences
 
-## 1. Why Columnar Engines Matter
+## 1. Why Columnar Systems Exist
 
-Columnar databases are optimized for analytical workloads where queries scan many rows but relatively few columns, applying aggregations, filters, and time-window analysis.
+Columnar systems optimize analytical scans where queries read many rows but few columns, applying aggregation and filtering over large datasets.
+
+This is a fundamentally different optimization target from OLTP row stores.
 
 ---
 
-## 2. Storage Layout Fundamentals
+## 2. Physical Layout Differences
 
-Row-store layout favors OLTP point updates and entity reconstruction.  
-Column-store layout groups values by column, enabling:
+Row layout:
 
-- high compression (similar adjacent values)
-- vectorized execution
-- minimized IO for selective column reads
+- stores full tuples together
+- efficient for point updates and row reconstruction
+
+Column layout:
+
+- stores values by column segments
+- efficient for compression and vectorized scans
 
 ```mermaid
 flowchart LR
-    A[Table: Rows] --> B{Storage Model}
-    B --> C[Row Store: full row blocks]
-    B --> D[Column Store: column segments]
-    D --> E[Compression + vectorized scans]
+    logicalTable[LogicalTable] --> storageChoice{StorageLayout}
+    storageChoice -- RowStore --> rowPath[RowOrientedPages]
+    storageChoice -- ColumnStore --> colPath[ColumnSegments]
+    colPath --> vectorExec[VectorizedExecution]
 ```
 
-#### In-Line Glossary: Vectorized Execution
+#### In-Line Glossary: Late Materialization
 
-**What it is:** Query operators process batches of values (vectors) rather than one tuple at a time.  
-**Why here:** Modern CPUs benefit from cache locality and SIMD-friendly operations.  
-**Systemic impact:** Significant analytic speedup, especially for scans/aggregations over large datasets.
+**What it is:** delaying full row reconstruction until after filter and projection stages.  
+**Why here:** avoids unnecessary memory and CPU overhead during scans.  
+**Systemic implication:** major performance gains for analytical workloads with selective projection.
 
 ---
 
-## 3. Internal Mechanics Relevant to Architects
+## 3. Engine Mechanics That Matter
 
-Common internals across columnar systems:
+Typical columnar optimizations:
 
-- segment/stripe files by column
-- zone maps/min-max metadata for data skipping
-- dictionary/run-length encoding
-- late materialization (reconstruct rows only when needed)
+- dictionary and run-length encoding
+- zone-map/min-max pruning
+- vectorized operator pipelines
+- column-level caching and decompression strategies
 
 Trade-off:
 
-- writes and row-level updates are typically more expensive than in OLTP row stores.
+- row-by-row updates are usually more expensive than in OLTP-focused stores.
 
 ---
 
-## 4. Workload Fit and Misfit
+## 4. Ingestion and Freshness Models
 
-Best fit:
+Common ingestion patterns:
 
-- BI dashboards
-- ad-hoc analytics
-- cohort analysis
-- large fact-table aggregation
+- batch ETL
+- micro-batch streaming
+- near-real-time CDC pipelines
 
-Poor fit:
+Architecture implication:
 
-- high-frequency small transactional updates
-- strict low-latency point writes
-- complex per-request OLTP invariants
+- freshness SLA must be explicit (for example, 5 minutes, 1 hour)
+- analytics correctness depends on ingestion reliability, not only query engine speed
 
 ---
 
-## 5. Decision Impact in Polyglot Architectures
+## 5. When Columnar Is the Wrong Choice
 
-Recommended pattern:
+Avoid columnar as primary operational store when:
 
-1. transactional system of record in relational OLTP engine
-2. event/CDC pipeline into columnar OLAP store
-3. analytical serving isolated from transactional path
+- high-frequency transactional updates dominate
+- strict low-latency point writes are required
+- cross-row transactional invariants are critical on the serving path
+
+Columnar should be treated as analytical backbone, not default OLTP replacement.
+
+---
+
+## 6. Hybrid Reference Pattern
 
 ```mermaid
 flowchart TD
-    OLTP[(OLTP Database)] --> CDC[CDC / Event Stream]
-    CDC --> ETL[Transform + Quality Gates]
-    ETL --> OLAP[(Columnar Warehouse/Lakehouse)]
-    OLAP --> BI[BI / Analytics / ML Features]
+    oltp[OperationalOLTPStore] --> cdc[CDCOrEventStream]
+    cdc --> transform[TransformAndQuality]
+    transform --> columnar[ColumnarWarehouseLakehouse]
+    columnar --> bi[BIAndAnalytics]
+    columnar --> ml[FeatureAndModelPipelines]
 ```
 
----
-
-## 6. Cost and Governance Considerations
-
-- Storage often cheaper per analytic query due to compression and pruning.
-- Compute separation can improve elasticity but requires robust cost controls.
-- Data freshness depends on ingestion latency and pipeline reliability.
-
-#### In-Line Glossary: Data Freshness SLA
-
-**What it is:** Maximum acceptable lag between source-of-truth updates and analytical availability.  
-**Why here:** Decision quality may degrade if analytical data is stale.  
-**Systemic impact:** Pipeline architecture must be designed as an SLO-governed system, not a best-effort batch job.
+This separation protects transactional paths while enabling deep analytics.
 
 ---
 
-## 7. Decision Checklist
+## 7. Architect Decision Checklist
 
-- Does the workload scan large datasets and few columns?
-- Is sub-second transactional write latency required (if yes, keep out of columnar write path)?
-- Can ingestion lag be tolerated?
-- Is there governance for schema evolution and semantic consistency?
+1. Are query patterns scan/aggregate heavy?
+2. Is update profile append-oriented?
+3. What freshness SLA is acceptable?
+4. Is there governance for semantic consistency between OLTP and OLAP layers?
+5. Is cost model validated for sustained query concurrency?
 
-If answers favor analytics-first behavior, columnar engines should be a first-class component in the architecture.
+---
+
+## 8. External References
+
+- [ClickHouse Architecture](https://clickhouse.com/docs/en/development/architecture)
+- [Snowflake Architecture Overview](https://docs.snowflake.com/en/user-guide/intro-key-concepts)

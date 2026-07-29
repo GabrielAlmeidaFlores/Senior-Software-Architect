@@ -6,6 +6,16 @@ This masterclass is a multi-document reference for senior-level database archite
 
 This module is the **current phase** of the broader repository journey, which will later expand into Linux, cloud, and other core software engineering domains.
 
+## Depth Standard
+
+Each document in this module follows a theory-heavy standard:
+
+- concept definition, mechanism, and invariants
+- quantitative or formal reasoning when applicable
+- explicit trade-off analysis and failure implications
+- operational consequences and decision guidance
+- visual explanation through Mermaid for complex flows
+
 ## Document Map
 
 ### 01 Theory and Foundations

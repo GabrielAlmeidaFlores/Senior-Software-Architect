@@ -1,112 +1,135 @@
-# PostgreSQL vs MySQL (InnoDB): Architectural Decision Comparison
+# PostgreSQL vs MySQL (InnoDB): Deep Architectural Comparison
 
-## 1. Decision Context
+## 1. Purpose
 
-Both engines are mature and production-proven. Selection should be driven by workload shape, consistency demands, extensibility requirements, and operating model.
+This document compares PostgreSQL and MySQL/InnoDB at architecture level, emphasizing execution behavior, correctness posture, operations, and long-term platform implications.
 
 ---
 
-## 2. Head-to-Head Comparison Matrix
+## 2. Decision Principle
 
-| Criterion | PostgreSQL | MySQL (InnoDB) | Architectural Meaning |
+There is no universally superior engine. The correct choice is workload-constrained and team-constrained.
+
+- workload-constrained: query shape, write contention, consistency requirements
+- team-constrained: operational maturity, tooling, incident response capability
+
+---
+
+## 3. Comparative Matrix
+
+| Dimension | PostgreSQL | MySQL InnoDB | Architecture Implication |
 |---|---|---|---|
-| SQL Standards Compliance | Generally stronger and feature-rich | Strong but historically more pragmatic deviations | Impacts portability and complex query behavior predictability |
-| Extensibility | High (custom types, operators, extensions, FDW) | Lower at engine/planner level | Matters for advanced domains (GIS, time-series, custom indexing semantics) |
-| MVCC Model | Tuple versioning in heap, vacuum-managed | Undo-log based MVCC with purge | Different maintenance and bloat/purge operational profiles |
-| JSON Workloads | JSONB with rich operators + GIN | JSON support solid, less operator ecosystem depth | Hybrid relational-document workloads often favor PostgreSQL |
-| Read Replication | Robust physical/logical replication options | Common primary-replica patterns, strong ecosystem | Both scale reads; consistency semantics depend on lag and routing |
-| Write Throughput | Excellent; can be limited by contention and autovacuum tuning | Excellent OLTP throughput with tuned InnoDB | Data model and contention hotspots dominate outcomes |
-| Partitioning/Sharding | Native partitioning; sharding often external tooling | Native partitioning + Vitess ecosystem maturity | Large-scale horizontal strategy differs significantly |
-| Operational Simplicity | Rich features, tuning depth can be complex | Operationally familiar in many orgs | Team expertise can outweigh theoretical advantages |
+| SQL expressiveness | very strong | strong, more pragmatic history | affects complex analytical/relational modeling ergonomics |
+| Extensibility | high (extensions, operator classes, FDW) | lower core extensibility | matters when product needs custom data capabilities |
+| MVCC style | tuple versions in heap + vacuum cleanup | undo-based snapshot reconstruction | different maintenance pressure and tuning profile |
+| JSON capabilities | JSONB ecosystem depth | solid JSON support | hybrid model ergonomics often favor PostgreSQL |
+| Lock behavior nuance | robust, highly tunable with model choices | next-key/gap behavior important under RR | contention patterns differ under range-heavy writes |
+| Replication tooling | rich physical/logical patterns | mature primary-replica ecosystem | failover/read-scaling architecture differs |
+| Horizontal strategy | partition + external/distributed options | partition + Vitess path common | scale-out architecture and ops model diverge |
 
 ---
 
-## 3. Optimizer and Execution Behavior
+## 4. Execution Path Trade-offs
 
-### PostgreSQL
+### 4.1 Write-Heavy Workloads
 
-- Cost-based optimizer with deep plan variants.
-- Benefits strongly from accurate statistics and `ANALYZE`.
-- Advanced query shapes (CTEs, window functions, complex joins) often perform predictably with careful tuning.
+PostgreSQL risks:
 
-### MySQL
+- vacuum lag -> bloat -> degraded plan quality
 
-- Optimizer matured significantly; still may require query/index shaping for complex analytical patterns.
-- InnoDB clustering around primary key can be advantageous for certain access paths.
+MySQL risks:
 
-Architectural takeaway:
+- lock/gap contention patterns under specific predicates
+- purge pressure from long transactions
 
-- For complex relational modeling and advanced SQL semantics, PostgreSQL often provides stronger ergonomics.
-- For high-volume OLTP with straightforward access paths and organizational familiarity, MySQL can reduce adoption friction.
+### 4.2 Read-Heavy Workloads
+
+PostgreSQL strengths:
+
+- complex plan capabilities, rich indexes
+
+MySQL strengths:
+
+- predictable OLTP read paths with tuned buffer behavior
+
+Both require careful read-routing policy when replicas are involved.
 
 ---
 
-## 4. Concurrency Under High Write Load
+## 5. Failure Domain and Recovery Considerations
 
-Dominant factors for both:
+Questions that should drive selection:
 
-- hotspot key concentration
-- transaction length
-- secondary index churn
-- durability flush policy
+1. How often will failover be rehearsed?
+2. What replica lag tolerance is acceptable?
+3. What operational budget exists for advanced tuning?
+4. Is extension flexibility strategic or unnecessary risk?
 
-Differences:
+#### In-Line Glossary: Operational Complexity Budget
 
-- PostgreSQL may accumulate bloat if vacuum lags.
-- InnoDB may face lock/gap-lock contention depending on access patterns and isolation behavior.
+**What it is:** organizational capacity to run sophisticated tuning, incident response, and lifecycle maintenance.  
+**Why here:** a technically superior option can still be wrong if operating model cannot sustain it.  
+**Systemic implication:** platform fit includes people and process, not only benchmarks.
+
+---
+
+## 6. Scenario-Based Recommendations
+
+### Scenario A: Complex Domain Model + Advanced Queries
+
+Likely advantage: PostgreSQL.
+
+Reason:
+
+- richer query/operator/extensibility ecosystem often reduces architectural workaround complexity.
+
+### Scenario B: High-Volume OLTP with Existing MySQL Expertise
+
+Likely advantage: MySQL/InnoDB.
+
+Reason:
+
+- team maturity and ecosystem tooling may deliver faster reliable outcomes.
+
+### Scenario C: Global Horizontal SQL Ambition
+
+Neither vanilla engine alone solves this perfectly.
+
+Potential directions:
+
+- PostgreSQL + distributed variants/ecosystem tooling
+- MySQL + Vitess
+- evaluate distributed SQL alternatives when invariants and geography demand it
+
+---
+
+## 7. Benchmarking Standard Before Final Decision
+
+Minimum benchmark requirements:
+
+- production-like data skew
+- mixed read/write traffic, not isolated microbenchmarks
+- p95/p99 objectives
+- failover and lag tests
+- cost/performance over sustained windows
 
 ```mermaid
-flowchart TD
-    A[High Write Load] --> B{Hotspot Keys?}
-    B -- Yes --> C[Shard/partition by ownership key]
-    B -- No --> D[Optimize indexes and batch writes]
-    C --> E[Reduce lock/version contention]
-    D --> E
-    E --> F[Stabilize P99 latency]
+flowchart LR
+    reqs[BusinessAndSLORequirements] --> candidate[EngineCandidates]
+    candidate --> bench[RealisticBenchmarking]
+    bench --> failover[FailureAndRecoveryDrills]
+    failover --> decision[ADRBackedDecision]
 ```
 
 ---
 
-## 5. Ecosystem Maturity and Tooling
+## 8. Final Guidance
 
-### PostgreSQL Ecosystem Strengths
+Choose the engine that minimizes total architecture risk across:
 
-- Extensions (`postgis`, `timescaledb`, `pgvector`, `pg_stat_statements`).
-- Strong community around observability and performance diagnostics.
+- correctness
+- performance predictability
+- operational sustainability
+- evolution flexibility
 
-### MySQL Ecosystem Strengths
-
-- Broad hosting support and operational familiarity.
-- Mature managed offerings and tools around replication and failover.
-- Vitess for large-scale sharded MySQL platforms.
-
----
-
-## 6. Strictness vs Pragmatism Trade-off
-
-If the organization values expressive SQL, standards alignment, and extensibility, PostgreSQL is often strategic.  
-If operational familiarity, existing tooling, and straightforward transactional patterns dominate, MySQL may lower risk and delivery time.
-
-#### In-Line Glossary: Operational Risk Budget
-
-**What it is:** The practical capacity of a team to absorb incidents, tuning complexity, and migration effort.  
-**Why here:** “Best” database technically may be wrong if operating model cannot sustain it.  
-**Systemic impact:** Platform choices must optimize for socio-technical throughput, not only benchmark metrics.
-
----
-
-## 7. Practical Decision Heuristics
-
-Pick PostgreSQL when:
-
-- You need advanced SQL features and extensibility.
-- Hybrid relational + document querying is first-class.
-- Strict transactional semantics and rich indexing diversity are critical.
-
-Pick MySQL when:
-
-- Existing operational skillset is predominantly MySQL.
-- OLTP workload is high and access patterns are predictable.
-- You plan to leverage Vitess for sharded scale-out.
-
-Run a proof using production-like data distributions and SLO-centric benchmarks before final commitment.
+The best decision is explicit, measured, and revisitable via ADRs.

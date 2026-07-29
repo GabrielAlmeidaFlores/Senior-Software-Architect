@@ -1,151 +1,192 @@
-# Operational Excellence for Databases: SRE, Reliability, and Governance
+# Operational Excellence for Databases: Reliability Math, Failure Governance, and Production Discipline
 
-## 1. Objective
+## 1. Purpose
 
-Database architecture is incomplete without operational excellence.  
-This document defines the reliability, observability, security, and governance baseline required for senior-level practice.
-
----
-
-## 2. SLO/SLI Framework for Data Platforms
-
-Core SLIs:
-
-- write success rate
-- read success rate
-- replication lag percentile
-- commit latency percentiles
-- recovery test success rate
-
-SLO design:
-
-- separate user-facing and internal SLOs
-- define error budgets and burn-rate alerting
-
-#### In-Line Glossary: Error Budget
-
-**What it is:** Allowed unreliability window derived from SLO target (for example, 99.9% implies ~43.2 minutes downtime/month).  
-**Why here:** Enables explicit trade-offs between feature velocity and reliability risk.  
-**Systemic impact:** Budget exhaustion should trigger release restraint and reliability remediation.
+Operational excellence is the difference between a database that works in demos and one that survives real production conditions. This document defines the reliability and governance standard expected for senior-level operation.
 
 ---
 
-## 3. Observability Baseline
+## 2. SLO/SLI Model for Database Platforms
+
+Core SLIs should include:
+
+- successful write rate
+- successful read rate
+- commit latency p95/p99
+- replication lag percentiles
+- failover completion time
+- restore success and restore duration
+
+### 2.1 Error Budget Math
+
+For SLO target `S`, allowed error budget over window `T` is:
+
+`budget = (1 - S) * T`
+
+Example:
+
+- monthly availability SLO 99.9% -> ~43.2 minutes budget
+
+#### In-Line Glossary: Burn Rate
+
+**What it is:** speed at which error budget is consumed relative to target window.  
+**Why here:** rapid burn indicates systemic risk and should trigger release throttling.  
+**Systemic implication:** burn-rate alerts connect reliability objectives to engineering cadence.
+
+---
+
+## 3. Observability Architecture
 
 ### 3.1 Metrics
 
-- RED/USE metrics for database endpoints and engine internals.
-- Cardinality control for labels to prevent telemetry cost explosion.
+Track both user-facing and engine-facing signals:
 
-### 3.2 Logging
+- request rate, errors, latency
+- lock wait times
+- checkpoint/compaction pressure
+- replica lag
+- cache hit and IO saturation
 
-- structured logs with correlation IDs and transaction identifiers.
-- explicit error taxonomy (timeout, deadlock, stale read, failover event).
+### 3.2 Logs
 
-### 3.3 Tracing
+Structured logs should include:
 
-- end-to-end spans including queue/broker boundaries.
-- annotate retries, circuit-open events, and quorum wait durations.
+- correlation IDs
+- transaction/session identifiers
+- error class taxonomy
+
+### 3.3 Traces
+
+Distributed traces must include DB spans and retry annotations.
 
 ```mermaid
 flowchart TD
-    A[Client Request] --> B[Service]
-    B --> C[Database]
-    C --> D[Replica/Shard]
-    A --> M[Metrics]
-    B --> T[Trace Spans]
-    C --> L[Structured Logs]
+    request[UserRequest] --> service[ServiceLayer]
+    service --> database[Database]
+    database --> replica[ReplicaOrShard]
+    service --> traces[TraceSpans]
+    database --> metrics[Metrics]
+    database --> logs[StructuredLogs]
 ```
 
 ---
 
-## 4. Backup, Restore, and DR Engineering
+## 4. Backup and Recovery Engineering
 
-Minimum standard:
+Required controls:
 
-1. periodic full and incremental backups
-2. point-in-time recovery validation
-3. cross-region copy with retention policies
-4. automated restore drills
+1. full + incremental backup schedule
+2. point-in-time recovery capability
+3. cross-region retention where required
+4. periodic restore drills
 
-RTO/RPO governance:
-
-- map each bounded context to explicit recovery targets.
-- validate with game-day scenarios, not only policy documents.
+Recovery confidence is proven only by restoration tests, never by backup existence alone.
 
 ---
 
-## 5. Failure Mode Engineering
+## 5. Failure Mode Catalog and Response
 
-### Mandatory Scenarios
+Mandatory scenario classes:
 
-- primary loss and failover correctness
-- network partition and split-brain prevention
-- storage saturation and degraded-mode behavior
-- compaction/checkpoint storms
-- lock contention spikes and queue collapse
+- primary node crash
+- partition and split-brain risk
+- storage saturation
+- replication backlog/lag explosion
+- lock or queue collapse under hotspot traffic
 
-### Resilience Controls
+For each scenario define:
+
+- detection signal
+- initial containment action
+- failover/fallback criteria
+- recovery validation steps
+
+---
+
+## 6. Resilience Controls
 
 - adaptive timeouts
-- bounded retries with jitter
-- load shedding and admission control
-- workload isolation per tenant/domain
+- retry with backoff and jitter
+- circuit-break behavior for dependent services
+- load shedding/admission control
+- tenant or workload isolation
+
+These controls reduce blast radius and preserve core correctness paths.
+
+#### In-Line Glossary: Blast Radius
+
+**What it is:** maximum scope of impact from a single failure event.  
+**Why here:** architecture quality is measured by how small and recoverable failures are.  
+**Systemic implication:** partitioning and isolation boundaries should be intentionally designed to cap impact.
 
 ---
 
-## 6. Security and Compliance for Data Architectures
+## 7. Capacity and Cost Discipline
 
-- encryption at rest with managed key rotation
-- mTLS in transit for east-west and north-south traffic
-- least-privilege role model and short-lived credentials
-- immutable audit logs for privileged changes
+Capacity planning inputs:
 
-Compliance mapping:
+- throughput growth projection
+- storage/index growth profile
+- burst concurrency envelope
+- failover overhead margin
 
-- retention and deletion controls by data class
-- PII minimization and tokenization where possible
+Queueing reminder:
 
----
+- as utilization approaches saturation, wait time grows nonlinearly
 
-## 7. Capacity and Cost Governance
+Operational rule:
 
-Model inputs:
-
-- growth projections (ingest, storage, index expansion)
-- workload seasonality and burst envelopes
-- per-query and per-tenant cost attribution
-
-Queueing lens:
-
-- as utilization approaches saturation, queue wait dominates total latency
-- capacity plans must be based on tail percentile behavior, not average throughput
+- capacity targets must be based on tail percentiles, not average utilization.
 
 ---
 
-## 8. Runbook and Ownership Standards
+## 8. Security and Compliance Baseline
 
-Every critical datastore needs:
+- encryption at rest with key-rotation policy
+- TLS/mTLS for traffic protection
+- least-privilege access model
+- auditable privileged operation logs
+- retention/deletion control by data classification
 
-- clear service owner/on-call rotation
-- incident runbooks with decision trees
-- rollback/failback scripts and verification steps
-- postmortem process with corrective action tracking
+Security controls must be operationally testable, not document-only intentions.
+
+---
+
+## 9. Incident Governance Lifecycle
 
 ```mermaid
 flowchart LR
-    I[Incident Trigger] --> T[Triage]
-    T --> M[Mitigate]
-    M --> R[Recover]
-    R --> P[Postmortem]
-    P --> A[Action Items]
-    A --> V[Verification]
+    detect[DetectIncident] --> triage[TriageSeverity]
+    triage --> mitigate[MitigateImpact]
+    mitigate --> recover[RecoverService]
+    recover --> verify[VerifyDataAndSLO]
+    verify --> postmortem[Postmortem]
+    postmortem --> actions[CorrectiveActions]
 ```
+
+Postmortem quality requirements:
+
+- causal timeline
+- contributing factors
+- prevention actions with owners and due dates
 
 ---
 
-## 9. External Visual References
+## 10. Production Readiness Checklist
+
+Before production go-live:
+
+1. SLO/SLI/error budget definitions approved
+2. dashboards and alerts validated
+3. failover and restore drills passed
+4. runbooks tested by on-call team
+5. security controls verified in environment
+
+Only after this checklist can a database platform be considered operationally ready.
+
+---
+
+## 11. External References
 
 - [Google SRE Workbook](https://sre.google/workbook/table-of-contents/)
-- [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
-- [NIST SP 800-57 Key Management](https://csrc.nist.gov/publications/detail/sp/800-57-part-1/rev-5/final)
+- [OpenTelemetry Docs](https://opentelemetry.io/docs/)

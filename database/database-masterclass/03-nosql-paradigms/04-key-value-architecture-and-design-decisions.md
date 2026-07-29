@@ -1,117 +1,108 @@
-# Key-Value Databases: Architecture and Decision Impact
+# Key-Value Architecture: Latency Physics, Partitioning, and Correctness Trade-offs
 
-## 1. Core Model
+## 1. Why Key-Value Systems Are Strategic
 
-Key-value stores expose a simple contract:
-
-- `GET(key) -> value`
-- `PUT(key, value)`
-- optional TTL, atomic increment, and conditional writes
-
-Simplicity enables extremely low latency and high throughput.
+Key-value databases are often the lowest-latency persistence layer in distributed architectures. Their simplicity is a strength, but that same simplicity pushes relational complexity and consistency policy into surrounding services.
 
 ---
 
-## 2. Internal Architecture Patterns
+## 2. Internal Design Patterns
 
-Common implementation patterns:
+Common architecture elements:
 
-- hash partitioning by key
-- replication per partition
-- in-memory or memory-first access paths
-- append-only logs and periodic compaction/snapshot
+- key hashing for partition routing
+- replication groups per partition
+- optional in-memory serving layer
+- append-only logs and snapshot/compaction lifecycle
 
 ```mermaid
 flowchart LR
-    C[Client] --> R[Router/Proxy]
-    R --> P1[Partition A]
-    R --> P2[Partition B]
-    R --> P3[Partition C]
-    P1 --> REP1[Replicas]
-    P2 --> REP2[Replicas]
-    P3 --> REP3[Replicas]
+    client[Client] --> router[KeyRouter]
+    router --> partitionA[PartitionA]
+    router --> partitionB[PartitionB]
+    router --> partitionC[PartitionC]
+    partitionA --> replicasA[ReplicaSetA]
+    partitionB --> replicasB[ReplicaSetB]
+    partitionC --> replicasC[ReplicaSetC]
 ```
 
-#### In-Line Glossary: Partition Key Hotspot
+#### In-Line Glossary: Hot Key
 
-**What it is:** Uneven request concentration on specific keys or key ranges.  
-**Why here:** Even horizontally scalable KV systems can fail under skewed key distributions.  
-**Systemic impact:** Throughput collapses at hotspot partitions while cluster-wide utilization appears underused.
-
----
-
-## 3. Strengths and Limits
-
-Strengths:
-
-- predictable latency for key lookups
-- straightforward horizontal scaling
-- excellent for ephemeral/session state
-
-Limits:
-
-- weak ad-hoc query flexibility
-- secondary indexes may be limited/expensive
-- modeling complex relationships becomes application burden
+**What it is:** disproportionately accessed key causing localized resource saturation.  
+**Why here:** partition scalability assumptions break under skewed access distributions.  
+**Systemic implication:** throughput collapse can occur despite low average cluster utilization.
 
 ---
 
-## 4. Typical Enterprise Use Cases
+## 3. Consistency Modes and Their Effects
 
-- session storage
-- distributed locks (with caution)
-- rate limiting counters
-- feature flag delivery
-- cache-aside acceleration
+Many key-value systems support configurable consistency:
 
-Do not treat key-value as universal primary database for domains needing rich relational constraints.
+- eventual/async for low latency
+- quorum/strong read options for correctness-sensitive operations
 
----
+Architecture implication:
 
-## 5. Consistency and Correctness Decisions
-
-Key-value systems often provide tunable consistency:
-
-- eventual reads for low latency
-- quorum/stronger reads for correctness-critical operations
-
-Architectural impact:
-
-- endpoint-level consistency policies should be explicit.
-- idempotency and conflict-safe write semantics are required under retry/failover.
+- consistency choice should be operation-level
+- retries must be idempotent
+- stale read tolerance must be explicit in product behavior
 
 ---
 
-## 6. Operational Risk Profile
+## 4. Performance and Capacity Behavior
 
-Critical risks:
+Primary drivers:
 
-- memory pressure and eviction policy side effects
-- replication lag during failover
-- noisy-neighbor effects in multi-tenant clusters
+- key distribution entropy
+- value size distribution
+- memory pressure and eviction policy
+- replication lag and failover mode
 
-Controls:
+Tail risk drivers:
 
-- keyspace governance
-- per-tenant quotas
-- capacity modeling by item size distribution and TTL churn
+- hotspot partitions
+- large-object skew
+- background persistence or compaction spikes
+
+---
+
+## 5. Strong Use Cases
+
+- sessions and auth state
+- feature flags
+- rate limiting and counters
+- fast cache-backed serving paths
+
+Weak use cases:
+
+- join-centric querying
+- strict multi-entity relational invariants
+- complex ad-hoc analytics
+
+---
+
+## 6. Failure and Recovery Trade-offs
+
+Key questions:
+
+1. What data loss window is acceptable?
+2. Are writes acknowledged before replication?
+3. How is failover promoted and how quickly?
+4. Can downstream systems reconcile duplicate/reordered events?
 
 ```mermaid
 flowchart TD
-    A[Workload Demand] --> B{Key Distribution Balanced?}
-    B -- No --> C[Hotspot Mitigation: key salting/sharding]
-    B -- Yes --> D[Standard partition scaling]
-    C --> E[Latency Stabilization]
-    D --> E
+    traffic[IncomingTraffic] --> keySkew{SkewDetected}
+    keySkew -- yes --> mitigation[KeySaltingOrPartitionRefactor]
+    keySkew -- no --> normalScale[HorizontalScale]
+    mitigation --> stable[StabilizedP99]
+    normalScale --> stable
 ```
 
 ---
 
-## 7. Decision Checklist
+## 7. Architect Guidance
 
-- Is the dominant access pattern point lookup by key?
-- Are relationships and ad-hoc queries minimal?
-- Can data loss/eviction semantics be constrained by policy?
-- Is tail latency more important than query expressiveness?
+Use key-value as a deliberate layer for latency-dominant paths, not as a universal system of record.
 
-If yes, key-value is likely a strategic fit for that bounded context.
+If domain invariants or query complexity increase, pair key-value with relational/document systems instead of forcing one model to solve incompatible requirements.

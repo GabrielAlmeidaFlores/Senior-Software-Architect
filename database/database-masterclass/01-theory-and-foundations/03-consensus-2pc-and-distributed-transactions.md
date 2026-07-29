@@ -1,136 +1,176 @@
 # Consensus, 2PC, and Distributed Transaction Semantics
 
-## 1. Why This Topic Is Non-Optional for Senior Architects
+## 1. Why This Topic Is Foundational
 
-Any multi-node database decision eventually encounters the coordination problem: how to keep replicated or partitioned state coherent under failures, delays, and split-brain risks.
+Distributed architecture fails at scale when teams treat coordination as an implementation detail. Coordination is a first-class architecture decision because it determines:
 
-This document covers:
-
-- consensus safety/liveness mechanics
-- Two-Phase Commit (2PC) limits
-- practical alternatives (sagas, idempotency, escrow patterns)
+- correctness envelope under faults
+- write availability under partition
+- p99 latency under load
+- operational recovery complexity
 
 ---
 
-## 2. Consensus Algorithms (Raft-Oriented View)
+## 2. Consensus: Replicated State Machine Contract
 
-Consensus solves replicated state machine agreement:
+Consensus ensures nodes agree on a single ordered log of decisions.
 
-1. nodes must agree on ordered log entries
-2. committed entries become durable system history
-3. all healthy nodes eventually apply the same committed sequence
+Core guarantees:
 
-### 2.1 Raft Mechanics
+1. one committed order for each log index
+2. no committed value is silently replaced
+3. healthy replicas eventually apply committed entries
 
-- **Leader election** via randomized timeouts.
-- **Log replication** from leader to followers.
-- **Commit rule** via majority acknowledgments.
-- **Term-based safety** prevents stale leader overwrite.
+These guarantees are the substrate for strong distributed database semantics.
+
+### 2.1 Safety vs Liveness
+
+- **Safety:** never commit contradictory history.
+- **Liveness:** system eventually makes progress.
+
+In real systems, safety is usually prioritized; liveness can be delayed by partitions or unstable leadership.
+
+#### In-Line Glossary: Split Brain
+
+**What it is:** simultaneous conflicting leaders accepting writes for the same logical timeline.  
+**Why here:** preventing split brain is the central correctness challenge in distributed writes.  
+**Systemic implication:** leader election and quorum enforcement are mandatory, not optional hardening.
+
+---
+
+## 3. Raft Mechanics with Failure Paths
+
+Raft uses leader-based log replication.
+
+Lifecycle:
+
+1. leader election by randomized timeouts
+2. append entries from leader to followers
+3. commit on majority ack
+4. apply in order to state machine
 
 ```mermaid
 sequenceDiagram
-    participant C as Client
-    participant L as Leader
-    participant F1 as Follower 1
-    participant F2 as Follower 2
-    C->>L: write command
-    L->>F1: AppendEntries(log entry)
-    L->>F2: AppendEntries(log entry)
-    F1-->>L: ack
-    F2-->>L: ack
-    L-->>C: commit success
-    L->>F1: commit index advance
-    L->>F2: commit index advance
+    participant Client
+    participant Leader
+    participant FollowerA
+    participant FollowerB
+    Client->>Leader: write
+    Leader->>FollowerA: appendEntry
+    Leader->>FollowerB: appendEntry
+    FollowerA-->>Leader: ack
+    FollowerB-->>Leader: ack
+    Leader-->>Client: committed
 ```
 
-#### In-Line Glossary: Raft Safety
+Failure nuances:
 
-**What it is:** The guarantee that committed log entries are never lost or reordered in a way that violates linear history.  
-**Why here:** Database correctness under leader failover depends on this safety property.  
-**Systemic impact:** Majority quorum reduces split-brain risk but increases sensitivity to partition and latency.
+- leader crash before commit: entry may be overwritten by later leader
+- leader crash after commit: new leader must preserve committed prefix
+- unstable network: election churn increases write unavailability windows
 
 ---
 
-## 3. Two-Phase Commit (2PC)
+## 4. Two-Phase Commit (2PC)
 
-2PC coordinates atomic commit across multiple participants.
+2PC coordinates atomic commit across participants.
 
-Phase 1 (prepare):
+Phases:
 
-- coordinator asks each participant if it can commit.
-
-Phase 2 (commit/abort):
-
-- if all voted yes, coordinator instructs commit; otherwise abort.
+1. **Prepare:** participants vote yes/no and lock intent.
+2. **Commit/Abort:** coordinator issues final decision.
 
 ```mermaid
 sequenceDiagram
-    participant CO as Coordinator
-    participant P1 as Participant 1
-    participant P2 as Participant 2
-    CO->>P1: PREPARE?
-    CO->>P2: PREPARE?
-    P1-->>CO: YES
-    P2-->>CO: YES
-    CO->>P1: COMMIT
-    CO->>P2: COMMIT
+    participant Coordinator
+    participant P1
+    participant P2
+    Coordinator->>P1: prepare
+    Coordinator->>P2: prepare
+    P1-->>Coordinator: yes
+    P2-->>Coordinator: yes
+    Coordinator->>P1: commit
+    Coordinator->>P2: commit
 ```
 
-### 3.1 Failure Domain of 2PC
+#### In-Line Glossary: In-Doubt Transaction
 
-- Coordinator crash after prepare can block participants.
-- Network partitions can leave uncertain outcomes.
-- Locks may be held while waiting, harming throughput.
+**What it is:** participant state after prepare where final outcome is unknown due to coordinator or network failure.  
+**Why here:** this is the blocking pain point of 2PC.  
+**Systemic implication:** lock retention and operational intervention risk increase under faults.
 
-#### In-Line Glossary: Blocking Protocol
+### 4.1 2PC Failure Domains
 
-**What it is:** A protocol where participants can remain in uncertain state waiting for coordinator recovery.  
-**Why here:** 2PC is not partition-resilient in the same way quorum-based consensus protocols are.  
-**Systemic impact:** Operational recovery complexity and lock hold times can be unacceptable for high-scale OLTP.
+- coordinator crash after prepare can block progress
+- partition can isolate participants in uncertain state
+- long lock hold times reduce throughput
+
+2PC provides atomicity coordination but not full partition-tolerant progress guarantees.
 
 ---
 
-## 4. 2PC vs Consensus
+## 5. 2PC vs Consensus-Backed Transactions
 
 Key distinction:
 
-- 2PC provides atomicity coordination but not by itself replicated fault-tolerant consensus over coordinator decision.
-- Consensus protocols replicate decisions and leader state, improving fault tolerance.
+- 2PC: atomic agreement step across participants; can block
+- consensus-backed systems: replicate decision authority itself, improving crash tolerance
 
-In practice:
+Modern distributed SQL systems frequently combine:
 
-- Distributed SQL systems combine transaction protocols with consensus-backed logs.
-- Microservice architectures often avoid cross-service 2PC and use sagas/outbox patterns.
-
----
-
-## 5. Alternatives for Enterprise Architectures
-
-1. **Transactional outbox + idempotent consumers** for integration consistency.
-2. **Sagas** for long-running business workflows.
-3. **Escrow/accounting partitioning** to reduce cross-partition atomic writes.
-4. **Compensating transactions** with explicit business semantics.
+- transaction protocol for atomicity
+- consensus log for replicated durability and failover correctness
 
 ---
 
-## 6. Decision Guidance
+## 6. Alternatives in Microservice Architectures
 
-Use strict distributed transactions when:
+When cross-service global transactions are too costly:
 
-- invariant violation cost is catastrophic
-- throughput budget can absorb coordination overhead
-- organizational maturity can operate consensus systems reliably
+1. transactional outbox + idempotent consumers
+2. saga orchestration/choreography with compensations
+3. ownership partitioning to reduce cross-boundary writes
+4. escrow-like designs to avoid high-contention global counters
 
-Prefer eventually consistent coordination when:
+#### In-Line Glossary: Compensation
 
-- business can tolerate bounded convergence windows
-- global availability is prioritized
-- compensation and reconciliation are well-defined
+**What it is:** semantically meaningful inverse action used when a downstream step fails in a multi-step workflow.  
+**Why here:** eventually consistent workflows need business-level rollback semantics.  
+**Systemic implication:** compensation is not technical undo; it must preserve real business correctness.
 
 ---
 
-## 7. External Visual References
+## 7. Decision Framework for Architects
 
-- [Raft Consensus Visualization (The Secret Lives of Data)](https://thesecretlivesofdata.com/raft/)
-- [Google Spanner Paper Landing Page](https://research.google/pubs/pub39966/)
-- [Jepsen Analyses Index](https://jepsen.io/analyses)
+Use strict distributed transactional coordination when:
+
+- invariant breaches are unacceptable
+- legal/compliance demands strict auditable ordering
+- throughput and latency budget can absorb coordination overhead
+
+Prefer eventual consistency with compensations when:
+
+- bounded inconsistency is acceptable
+- availability and autonomy are higher priorities
+- domain provides robust reconciliation logic
+
+---
+
+## 8. Testing and Verification Requirements
+
+Mandatory pre-production tests:
+
+- leader crash during write commit
+- partition during prepare/commit phases
+- duplicate delivery and retry storms
+- prolonged node unavailability with catch-up replay
+
+Success criteria must include correctness assertions, not only uptime.
+
+---
+
+## 9. External References
+
+- [Raft Visualization](https://thesecretlivesofdata.com/raft/)
+- [Spanner Paper](https://research.google/pubs/pub39966/)
+- [Jepsen Analyses](https://jepsen.io/analyses)
