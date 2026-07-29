@@ -8,12 +8,7 @@ Key-value databases are often the lowest-latency persistence layer in distribute
 
 ## 2. Internal Design Patterns
 
-Common architecture elements:
-
-- key hashing for partition routing
-- replication groups per partition
-- optional in-memory serving layer
-- append-only logs and snapshot/compaction lifecycle
+Common architecture elements include key hashing for partition routing, replication groups per partition, an optional in-memory serving layer for hot keys, and append-only logs with snapshot or compaction lifecycles for durable persistence. Together these pieces explain why key-value systems scale horizontally for point access while remaining fragile under skewed keys and oversized values.
 
 ```mermaid
 flowchart LR
@@ -36,59 +31,27 @@ flowchart LR
 
 ## 3. Consistency Modes and Their Effects
 
-Many key-value systems support configurable consistency:
-
-- eventual/async for low latency
-- quorum/strong read options for correctness-sensitive operations
-
-Architecture implication:
-
-- consistency choice should be operation-level
-- retries must be idempotent
-- stale read tolerance must be explicit in product behavior
+Many key-value systems support configurable consistency, ranging from eventual or async replication for lowest latency to quorum or strong-read options for correctness-sensitive operations. Consistency choice should therefore be operation-level rather than cluster-global; retries must be idempotent so failover and duplicate delivery do not corrupt state; and stale-read tolerance must be explicit in product behavior so clients do not assume freshness the store does not guarantee.
 
 ---
 
 ## 4. Performance and Capacity Behavior
 
-Primary drivers:
-
-- key distribution entropy
-- value size distribution
-- memory pressure and eviction policy
-- replication lag and failover mode
-
-Tail risk drivers:
-
-- hotspot partitions
-- large-object skew
-- background persistence or compaction spikes
+Primary drivers of throughput and latency include key-distribution entropy, value-size distribution, memory pressure under the chosen eviction policy, and replication lag under the configured failover mode. Tail risk concentrates on hotspot partitions that pin load to a few nodes, large-object skew that inflates network and memory cost per request, and background persistence or compaction spikes that steal IO from the serving path even when request rates look steady.
 
 ---
 
 ## 5. Strong Use Cases
 
-- sessions and auth state
-- feature flags
-- rate limiting and counters
-- fast cache-backed serving paths
+Key-value stores fit sessions and auth state that are keyed by session id and need fast get/put semantics. They fit feature flags and configuration blobs that are read far more often than written. They fit rate limiting and counters where atomic increments on a key are the natural API. They also fit fast cache-backed serving paths that absorb read spikes in front of a slower system of record.
 
-Weak use cases:
-
-- join-centric querying
-- strict multi-entity relational invariants
-- complex ad-hoc analytics
+They are weak when join-centric querying is required, when strict multi-entity relational invariants must be enforced in one place, or when complex ad-hoc analytics need scan and aggregation over many keys without a preplanned access path.
 
 ---
 
 ## 6. Failure and Recovery Trade-offs
 
-Key questions:
-
-1. What data loss window is acceptable?
-2. Are writes acknowledged before replication?
-3. How is failover promoted and how quickly?
-4. Can downstream systems reconcile duplicate/reordered events?
+Key recovery questions should be answered before production: what data-loss window is acceptable if a node fails before replication completes; whether writes are acknowledged before replicas confirm; how failover is promoted and how quickly clients observe the new primary; and whether downstream systems can reconcile duplicate or reordered events after retries. Those answers determine whether key-value is a durable store or a speed layer with explicit rebuild paths.
 
 ```mermaid
 flowchart TD
@@ -105,4 +68,4 @@ flowchart TD
 
 Use key-value as a deliberate layer for latency-dominant paths, not as a universal system of record.
 
-If domain invariants or query complexity increase, pair key-value with relational/document systems instead of forcing one model to solve incompatible requirements.
+If domain invariants or query complexity increase, pair key-value with relational or document systems instead of forcing one model to solve incompatible requirements.

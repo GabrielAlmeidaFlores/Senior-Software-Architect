@@ -10,15 +10,7 @@ This is a fundamentally different optimization target from OLTP row stores.
 
 ## 2. Physical Layout Differences
 
-Row layout:
-
-- stores full tuples together
-- efficient for point updates and row reconstruction
-
-Column layout:
-
-- stores values by column segments
-- efficient for compression and vectorized scans
+Row layout stores full tuples together, which is efficient for point updates and row reconstruction because all columns of a row sit on the same page or nearby pages. Column layout stores values by column segments, which is efficient for compression and vectorized scans because homogeneous values compress well and unused columns are never read from disk.
 
 ```mermaid
 flowchart LR
@@ -38,43 +30,19 @@ flowchart LR
 
 ## 3. Engine Mechanics That Matter
 
-Typical columnar optimizations:
-
-- dictionary and run-length encoding
-- zone-map/min-max pruning
-- vectorized operator pipelines
-- column-level caching and decompression strategies
-
-Trade-off:
-
-- row-by-row updates are usually more expensive than in OLTP-focused stores.
+Typical columnar engines combine dictionary and run-length encoding to shrink repetitive values, zone-map or min-max pruning to skip irrelevant segments, vectorized operator pipelines that process batches of values in CPU-friendly loops, and column-level caching with decompression strategies tuned for scan throughput. The trade-off is that row-by-row updates are usually more expensive than in OLTP-focused stores, because mutating one row may touch many column segments and invalidate compression blocks that were optimized for append-oriented ingest.
 
 ---
 
 ## 4. Ingestion and Freshness Models
 
-Common ingestion patterns:
-
-- batch ETL
-- micro-batch streaming
-- near-real-time CDC pipelines
-
-Architecture implication:
-
-- freshness SLA must be explicit (for example, 5 minutes, 1 hour)
-- analytics correctness depends on ingestion reliability, not only query engine speed
+Common ingestion patterns include batch ETL for periodic warehouse loads, micro-batch streaming for frequent but not continuous refresh, and near-real-time CDC pipelines that mirror operational change events into analytical storage. Architecture implication follows directly: freshness SLAs must be explicit—for example five minutes or one hour—and analytics correctness depends on ingestion reliability and ordering, not only on how fast the query engine can scan once data has landed.
 
 ---
 
 ## 5. When Columnar Is the Wrong Choice
 
-Avoid columnar as primary operational store when:
-
-- high-frequency transactional updates dominate
-- strict low-latency point writes are required
-- cross-row transactional invariants are critical on the serving path
-
-Columnar should be treated as analytical backbone, not default OLTP replacement.
+Avoid columnar as the primary operational store when high-frequency transactional updates dominate, when strict low-latency point writes are required, or when cross-row transactional invariants are critical on the serving path. Columnar systems should be treated as an analytical backbone, not as a default OLTP replacement, because their physical layout and execution model optimize scans at the expense of fine-grained mutation and interactive write latency.
 
 ---
 
@@ -95,11 +63,11 @@ This separation protects transactional paths while enabling deep analytics.
 
 ## 7. Architect Decision Checklist
 
-1. Are query patterns scan/aggregate heavy?
-2. Is update profile append-oriented?
-3. What freshness SLA is acceptable?
-4. Is there governance for semantic consistency between OLTP and OLAP layers?
-5. Is cost model validated for sustained query concurrency?
+1. Are query patterns scan and aggregate heavy enough that column projection and vectorized execution will dominate cost?
+2. Is the update profile append-oriented rather than random in-place mutation of individual rows?
+3. What freshness SLA is acceptable between operational writes and analytical visibility?
+4. Is there governance for semantic consistency between OLTP and OLAP layers so metrics do not silently diverge?
+5. Is the cost model validated for sustained query concurrency, not only for a single offline report?
 
 ---
 

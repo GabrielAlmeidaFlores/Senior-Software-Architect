@@ -16,10 +16,7 @@ This document compares database families that are frequently confused in intervi
 | Spanner | C over A | C over L | external-consistency-first global SQL |
 | DynamoDB | tunable | tunable | operation-level consistency profile |
 
-Interpretation note:
-
-- table labels indicate baseline tendencies, not immutable outcomes
-- endpoint-level consistency and topology can shift practical behavior significantly
+Interpretation note: table labels indicate baseline tendencies, not immutable outcomes. Endpoint-level consistency settings and topology choices can shift practical behavior significantly, so treat PACELC as a reading aid for default posture rather than a fixed guarantee for every operation.
 
 ---
 
@@ -33,7 +30,7 @@ Majority threshold for RF:
 
 `majority = floor(RF/2) + 1`
 
-Consistency levels (`ONE`, `QUORUM`, `ALL`, `LOCAL_QUORUM`) control acknowledgment and read intersection behavior.
+Consistency levels (`ONE`, `QUORUM`, `ALL`, `LOCAL_QUORUM`) control acknowledgment and read intersection behavior. Lower levels return sooner with fewer replicas; higher levels wait for more acknowledgments and improve the chance that reads see recent writes.
 
 ```mermaid
 flowchart LR
@@ -54,20 +51,13 @@ flowchart LR
 
 ### 3.2 Trade-off Reality
 
-- low CL improves latency/availability, increases stale risk
-- high CL improves freshness confidence, increases latency and failure sensitivity
+A low consistency level improves latency and availability because fewer replicas must respond, but it increases stale-read and lost-write risk under failure. A high consistency level improves freshness confidence by requiring broader acknowledgment, but it increases latency and failure sensitivity because any unavailable replica can block the operation from meeting its quorum.
 
 ---
 
 ## 4. CockroachDB Deep Mechanics
 
-CockroachDB combines relational SQL interface with consensus-backed distributed storage.
-
-Core features:
-
-- range-based sharding
-- Raft replication per range
-- serializable isolation default posture
+CockroachDB combines a relational SQL interface with consensus-backed distributed storage. Core features include range-based sharding that splits the keyspace as data grows, Raft replication per range for consensus durability, and a serializable isolation default posture that favors correctness over optimistic concurrency shortcuts.
 
 ```mermaid
 flowchart TD
@@ -79,20 +69,13 @@ flowchart TD
     rangeC --> leaseholderC[LeaseholderC]
 ```
 
-Trade-off:
-
-- stronger global correctness model
-- higher coordination latency compared with single-region single-node assumptions
-
-Best fit:
-
-- multi-region SQL with strict invariants and mature operations
+The trade-off is a stronger global correctness model at the cost of higher coordination latency compared with single-region, single-node assumptions. Best fit is multi-region SQL workloads that need strict invariants and have mature operations for range rebalancing, leaseholder placement, and latency budgeting across regions.
 
 ---
 
 ## 5. Redis Sentinel Deep Mechanics
 
-Redis sentinel provides monitoring, failover orchestration, and topology notification for master-replica deployments.
+Redis Sentinel provides monitoring, failover orchestration, and topology notification for master-replica deployments.
 
 It does not transform Redis into a universal strict transactional system of record by default.
 
@@ -102,20 +85,16 @@ It does not transform Redis into a universal strict transactional system of reco
 **Why here:** prevents single-observer false positives from triggering unsafe failover.  
 **Systemic implication:** sentinel topology design directly affects failover safety and responsiveness.
 
-Use Redis primarily for:
-
-- session and ephemeral state
-- caching and low-latency serving adjunct paths
-- rate limiting and counters
+Use Redis primarily for session and ephemeral state that can be rebuilt, for caching and low-latency serving adjunct paths in front of a durable store, and for rate limiting and counters where microsecond-class operations matter more than multi-entity ACID semantics.
 
 ---
 
 ## 6. Decision Playbook for These Engines
 
-1. If strict cross-region invariants dominate: evaluate CockroachDB/Spanner-style consistency-first systems.
-2. If availability and low latency dominate with tunable consistency appetite: evaluate Cassandra/Dynamo-style systems.
-3. If ultra-low-latency ephemeral state dominates: use Redis as speed layer, not default durable SoR.
-4. For mixed domains, design polyglot persistence with explicit boundaries and consistency contracts.
+1. If strict cross-region invariants dominate, evaluate CockroachDB or Spanner-style consistency-first systems whose default posture favors C over A and C over L.
+2. If availability and low latency dominate with appetite for tunable consistency, evaluate Cassandra or Dynamo-style systems where per-operation CL can trade freshness for speed.
+3. If ultra-low-latency ephemeral state dominates, use Redis as a speed layer rather than as the default durable system of record.
+4. For mixed domains, design polyglot persistence with explicit boundaries and consistency contracts so each engine owns the workloads it can guarantee.
 
 ---
 

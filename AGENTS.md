@@ -62,6 +62,23 @@ Required default pattern:
 - Prefer theory-heavy depth with formal or quantitative reasoning when applicable.
 - Allow deliberate repetition of critical ideas when it improves clarity and retention.
 
+### 3.2.1 No Shallow Noun-Only Bullet Lists
+
+Do not leave technical ideas as unexplained labels.
+
+Forbidden pattern:
+
+- Examples:
+  - referential integrity
+  - uniqueness constraints
+  - ACID-C is invariant preservation
+
+Required pattern:
+
+- Write complete explanatory prose for each idea: what it is, how it works in context, why it matters, and what fails if it is ignored.
+- Bullet lists are allowed only when each bullet is a full sentence (or short paragraph) that already includes that explanation.
+- Prefer paragraphs over noun-phrase lists for concept breakdowns, trade-offs, benefits, costs, examples, and decision criteria.
+
 This pattern is mandatory for current and future domains (for example, databases, Linux, cloud, networking, platform engineering, reliability, and security).
 
 ## 4) Required Runtime Behavior for Every Task

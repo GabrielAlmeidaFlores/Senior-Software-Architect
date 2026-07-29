@@ -4,7 +4,7 @@
 
 This document explains ACID and BASE as **complementary operating models**. In modern distributed architecture, ACID usually protects local invariants while BASE governs cross-service propagation and eventual convergence.
 
-The objective is not ideology. The objective is assigning the right consistency contract to each business risk class.
+The objective is not ideology. The objective is assigning the right consistency contract to each business risk class. When architects choose the wrong contract, they either create outages by over-coordinating or create silent corruption by under-coordinating.
 
 ---
 
@@ -12,15 +12,11 @@ The objective is not ideology. The objective is assigning the right consistency 
 
 ### 2.1 Atomicity
 
-Atomicity guarantees that a transaction is either fully committed or fully rolled back.
+Atomicity guarantees that a transaction is either fully committed or fully rolled back. From the client's perspective, there is no intermediate visible state in which only some of the intended mutations exist.
 
-Engine primitives usually include:
+Atomicity is implemented by recovery and logging primitives, not by a single runtime flag. The engine typically records undo information so incomplete work can be reversed, records redo or WAL information so committed work can be reconstructed after crash, and writes a durable commit marker that defines the success boundary. Without that durable commit evidence, crash recovery cannot safely decide whether a transaction finished or failed.
 
-- undo records for rollback
-- redo/WAL records for crash replay
-- a durable commit marker that defines success boundary
-
-Atomicity is therefore implemented by log protocol and recovery logic, not by a single runtime flag.
+If atomicity is violated, dependent systems may observe partial side effects, compensate incorrectly, or permanently diverge from the intended business state.
 
 #### In-Line Glossary: Commit Record
 
@@ -30,24 +26,19 @@ Atomicity is therefore implemented by log protocol and recovery logic, not by a 
 
 ### 2.2 Consistency (ACID-C)
 
-ACID consistency means transaction execution preserves declared invariants.
+ACID consistency means transaction execution preserves declared invariants of the data model. A successful commit must leave the database in a state that still satisfies those rules.
 
-Examples:
+Referential integrity is one such invariant: a foreign key must continue to point to a valid primary key after the transaction completes. If a parent record is removed while child records remain, the system has accepted an illegal relationship and downstream joins, cascades, or business workflows become unreliable.
 
-- referential integrity
-- uniqueness constraints
-- domain constraints (balance cannot drop below allowed limit)
+Uniqueness constraints are another invariant: values that must be unique (account numbers, emails, order IDs) must remain unique after concurrent inserts and updates. If uniqueness is only checked loosely, two concurrent transactions can create duplicate identities and break accounting, authentication, or idempotent processing.
 
-Important distinction:
+Domain constraints encode business rules that go beyond schema shape, such as a balance that cannot fall below an allowed limit. The database (or transactional application logic) must reject transitions that violate those rules, even when each individual write looks syntactically valid.
 
-- ACID-C is invariant preservation
-- CAP-C is distributed visibility ordering under partition conditions
-
-Treating these as identical creates design errors.
+It is critical to distinguish ACID consistency from CAP consistency. ACID-C means invariant preservation inside a transactional boundary. CAP-C means distributed visibility ordering under partition conditions: whether every read returns the latest committed value across replicas when communication is impaired. Treating these as identical creates design errors, because a locally ACID system can still serve stale replica reads, and a CAP-oriented distributed store may not enforce relational domain invariants.
 
 ### 2.3 Isolation
 
-Isolation defines how concurrent transactions observe and interfere with one another.
+Isolation defines how concurrent transactions observe and interfere with one another. Without isolation guarantees, transactions can interleave in ways that produce results no serial execution would have produced.
 
 | Level | DirtyRead | NonRepeatableRead | Phantom | WriteSkew |
 |---|---|---|---|---|
@@ -55,6 +46,8 @@ Isolation defines how concurrent transactions observe and interfere with one ano
 | ReadCommitted | prevented | possible | possible | possible |
 | RepeatableRead | prevented | prevented | engine-dependent | possible in snapshot models |
 | Serializable | prevented | prevented | prevented | prevented |
+
+Dirty reads occur when one transaction observes uncommitted writes from another. Non-repeatable reads occur when the same row changes between reads inside one transaction. Phantom reads occur when the set of rows matching a predicate changes because concurrent inserts or deletes alter membership. Write skew occurs when concurrent transactions each read overlapping predicate state and write disjoint rows that together violate a global invariant.
 
 #### In-Line Glossary: Write Skew
 
@@ -64,16 +57,11 @@ Isolation defines how concurrent transactions observe and interfere with one ano
 
 ### 2.4 Durability
 
-Durability means committed effects survive accepted fault model (process crash, node reboot, storage jitter within assumptions).
+Durability means committed effects survive the accepted fault model, such as process crash, node reboot, or storage jitter within assumed bounds. A commit acknowledgment is only meaningful if the system can reconstruct that commit after failure.
 
-Durability controls include:
+Durability is controlled by several interacting mechanisms. The fsync policy determines when log records are forced to durable media. Group commit behavior batches multiple commits to amortize sync cost, improving throughput but changing latency distribution. Synchronous replica acknowledgment modes decide whether commit waits for remote durability. Storage subsystem guarantees (controller caches, battery-backed write caches, filesystem barriers) determine whether the hardware and OS layers actually honor durability assumptions.
 
-- fsync policy
-- group commit behavior
-- synchronous replica acknowledgment modes
-- storage subsystem guarantees
-
-Durability is a probability envelope conditioned by infrastructure quality and configuration.
+Durability is therefore a probability envelope conditioned by infrastructure quality and configuration, not an absolute property independent of operations.
 
 ---
 
@@ -94,11 +82,7 @@ sequenceDiagram
     Engine->>DataPages: flush pages asynchronously
 ```
 
-Recovery generally runs:
-
-1. **analysis:** reconstruct active tx and dirty structures
-2. **redo:** replay committed intent after checkpoint point
-3. **undo:** rollback uncommitted losers
+Crash recovery generally proceeds in ordered phases. Analysis reconstructs which transactions were active and which pages may be dirty. Redo replays committed intent after the checkpoint point so durable commits are not lost. Undo rolls back uncommitted losers so incomplete work does not remain visible. These phases exist because engines deliberately flush data pages asynchronously for performance while relying on the log as the authoritative recovery timeline.
 
 #### In-Line Glossary: Checkpoint
 
@@ -110,16 +94,9 @@ Recovery generally runs:
 
 ## 4. Serializable vs Strict Serializable vs Snapshot
 
-- **Serializable:** equivalent to some serial order.
-- **Strict serializable:** serializable plus real-time order constraints.
-- **Snapshot isolation:** stable snapshot reads, but may allow write skew.
+Serializable execution means the concurrent history is equivalent to some serial order of the same transactions. Strict serializability strengthens that guarantee by also respecting real-time order: if transaction A fully completes before B begins, A appears before B in the serial order. Snapshot isolation gives each transaction a stable snapshot for reads and often improves concurrency, but it can still allow write skew and therefore may not preserve all business invariants.
 
-Why this matters:
-
-- financial and inventory invariants often need stronger semantics than default snapshot/RC modes
-- stronger semantics increase coordination and latency cost
-
-Architecture must price correctness against latency and throughput explicitly.
+This distinction matters because financial and inventory invariants often need stronger semantics than default snapshot or read-committed modes. Stronger semantics increase coordination and latency cost. Architecture must explicitly price correctness against latency and throughput rather than assuming a default isolation level is “good enough.”
 
 ---
 
@@ -127,15 +104,15 @@ Architecture must price correctness against latency and throughput explicitly.
 
 ### 5.1 Basically Available
 
-System aims to keep serving under partial failures whenever possible.
+A BASE-oriented system aims to keep serving under partial failures whenever possible. Instead of refusing requests until global agreement is restored, it prefers non-error responses with potentially weaker freshness guarantees. This does not eliminate failure; it shifts failure from hard outage into temporary inconsistency and later reconciliation.
 
 ### 5.2 Soft State
 
-Replica state can be transiently inconsistent and evolve with background propagation.
+Soft state means replica state can be transiently inconsistent and continues to evolve because of asynchronous propagation, retries, and repair. The system does not pretend that every replica is always identical at every moment. Architects must therefore design clients and workflows that tolerate temporary disagreement.
 
 ### 5.3 Eventual Consistency
 
-If writes stop, replicas converge eventually to a compatible value set under the system’s merge/repair model.
+Eventual consistency means that if writes stop, replicas converge eventually to a compatible value set under the system’s merge and repair model. Convergence is not automatic magic; it depends on anti-entropy, conflict resolution policy, and operational health. If repair lags or conflict policy is incomplete, “eventual” can become “never in practice.”
 
 #### In-Line Glossary: Anti-Entropy
 
@@ -149,15 +126,11 @@ If writes stop, replicas converge eventually to a compatible value set under the
 
 ### 6.1 ACID-Centric Failure Pressure
 
-- lock waits and deadlocks on hotspots
-- commit stalls from storage jitter
-- replica lag causing stale follower reads
+ACID systems often fail through contention and durability path pressure. Lock waits and deadlocks appear when hotspot keys are updated concurrently and isolation requires mutual exclusion. Commit stalls appear when storage jitter or fsync latency slows the durable commit path. Replica lag causes stale follower reads even when the primary remains strongly consistent, which becomes a user-visible consistency issue when read routing is naive.
 
 ### 6.2 BASE-Centric Failure Pressure
 
-- conflicting concurrent updates needing merge policy
-- monotonic read violations after client rerouting
-- convergence delays during heavy repair backlog
+BASE systems often fail through semantic ambiguity rather than hard refusal. Concurrent updates may conflict and require an explicit merge policy; without one, last-write-wins can silently discard meaningful updates. Clients that switch replicas can observe monotonic-read violations and appear to move backward in time. Heavy repair backlogs delay convergence and expand the window in which stale or conflicting state remains visible.
 
 #### In-Line Glossary: Causal Consistency
 
@@ -169,33 +142,17 @@ If writes stop, replicas converge eventually to a compatible value set under the
 
 ## 7. Quantitative Decision Heuristics
 
-Use ACID-first when:
+Use ACID-first when invariant breach cost is catastrophic, when compensation is expensive or legally constrained, and when the transaction scope is naturally bounded and modelable inside one ownership boundary. In those cases, the cost of coordination is usually lower than the cost of incorrect state.
 
-- invariant breach cost is catastrophic
-- compensation is expensive or legally constrained
-- transaction scope is naturally bounded and modelable
+Use BASE-first when uptime continuity is the dominant objective, when cross-region write throughput is high, and when the domain tolerates bounded staleness with an explicit reconciliation policy. In those cases, forcing global transactional coordination can create worse outages than temporary inconsistency.
 
-Use BASE-first when:
-
-- uptime continuity is dominant objective
-- cross-region write throughput is high
-- domain tolerates bounded staleness and has explicit reconciliation policy
-
-Latency and contention diagnostics:
-
-- if lock wait dominates p99, fix data model/access pattern first
-- if coordination RTT dominates p99, evaluate bounded-staleness read paths or ownership partitioning
+Latency and contention diagnostics should drive local remediation before paradigm abandonment. If lock wait dominates p99, fix the data model and access pattern first. If coordination round-trip time dominates p99, evaluate bounded-staleness read paths or ownership partitioning before declaring the store unfit.
 
 ---
 
 ## 8. Practical Hybrid Architecture Pattern
 
-A durable enterprise pattern:
-
-1. ACID command store per bounded context
-2. transactional outbox event publication
-3. BASE read models and integrations
-4. explicit staleness budgets per user workflow
+A durable enterprise pattern keeps both models in their strongest roles. Keep an ACID command store per bounded context for invariant-critical mutations. Publish domain events through a transactional outbox so event emission cannot diverge from committed state. Build BASE read models and integrations for scale, fan-out, and eventual projection. Define explicit staleness budgets per user workflow so product behavior matches consistency reality.
 
 ```mermaid
 flowchart TD
@@ -206,7 +163,7 @@ flowchart TD
     projections --> userReads[UserFacingReads]
 ```
 
-This pattern makes consistency boundaries explicit and auditable.
+This pattern makes consistency boundaries explicit and auditable. It also prevents the false choice of forcing every workflow into either pure ACID or pure BASE.
 
 ---
 

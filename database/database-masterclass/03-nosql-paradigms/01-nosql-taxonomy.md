@@ -10,65 +10,33 @@
 
 ### 2.1 Key-Value
 
-Primary contract:
+The primary contract of a key-value store is key lookup and key mutation with minimal query semantics. Clients address data by opaque keys; anything beyond get/put/delete is typically implemented in application code or as a thin secondary index layer.
 
-- key lookup and key mutation with minimal query semantics
+Strength comes from very low latency on hashed key paths and simple horizontal partitioning by key range or hash ring. Because the API surface is narrow, the engine can optimize the hot path aggressively and scale by adding partitions without a heavy query planner.
 
-Strength profile:
-
-- very low latency
-- simple horizontal partitioning
-
-Weakness profile:
-
-- poor ad-hoc query flexibility
-- relationship semantics moved into application code
+Weakness appears when ad-hoc query flexibility is required: filtering, joins, and relationship navigation are not native, so relationship semantics move into application code. That shift increases client complexity and makes correctness harder to reason about under concurrent updates.
 
 ### 2.2 Document
 
-Primary contract:
+The primary contract is semi-structured documents with nested fields and a flexible schema. Documents can evolve field-by-field without a rigid DDL cycle, which suits product domains where shape changes frequently.
 
-- semi-structured documents with nested fields and flexible schema
+Strength lies in rapid schema evolution and read locality for embedded object graphs. When related data is co-located in one document, a single fetch reconstructs the view the application needs without multi-table joins.
 
-Strength profile:
-
-- rapid schema evolution
-- read locality for embedded object graphs
-
-Weakness profile:
-
-- denormalization drift
-- large-document update cost
+Weakness centers on denormalization drift—the same logical fact may be copied into many documents and diverge under partial updates—and on large-document update cost, where rewriting a bulky document for a small field change amplifies write amplification and replication traffic.
 
 ### 2.3 Wide-Column
 
-Primary contract:
+The primary contract is partitioned sparse rows with clustering order. Partition keys define distribution; clustering keys define on-disk sort order within a partition, which makes time-series and append-style access patterns natural.
 
-- partitioned sparse rows with clustering order
+Strength is massive write throughput and linear-ish scaling for append and time-series patterns. Sparse columns avoid paying storage for unused attributes, and sequential clustering keeps common range scans efficient within a partition.
 
-Strength profile:
-
-- massive write throughput
-- linear-ish scaling for append/time-series patterns
-
-Weakness profile:
-
-- query flexibility constrained by partition/clustering keys
-- secondary access patterns require explicit design effort
+Weakness is that query flexibility is constrained by partition and clustering keys: access patterns that do not match the key design become expensive or impossible without secondary indexes. Secondary access patterns therefore require explicit design effort up front, not after the fact.
 
 ### 2.4 Graph
 
-Primary contract:
+The primary contract treats nodes and edges as first-class model citizens. Relationships are stored and indexed for traversal rather than reconstructed through join pipelines at query time.
 
-- nodes and edges as first-class model
-
-Strength profile:
-
-- traversal-centric queries perform naturally
-
-Weakness profile:
-
-- difficult horizontal scaling for arbitrary deep traversals
+Strength is that traversal-centric queries perform naturally: multi-hop path questions expand along edges without repeatedly joining large tables. Weakness is difficult horizontal scaling for arbitrary deep traversals, because deep or high-branching walks often cross partition boundaries and explode the active frontier.
 
 ---
 
@@ -76,15 +44,11 @@ Weakness profile:
 
 ### 3.1 B-Tree Bias
 
-- balanced page hierarchy
-- strong point/range read behavior
-- in-place update costs under heavy random write workloads
+B-tree engines organize data as a balanced page hierarchy that keeps point and range reads efficient under moderate update rates. In-place updates on leaf pages favor read-heavy or update-in-place workloads, but random write churn increases page splits, write amplification, and lock or latch contention on hot pages.
 
 ### 3.2 LSM Bias
 
-- log + memtable write path
-- immutable SSTables + compaction lifecycle
-- stronger ingest potential, but compaction and read amplification costs
+LSM engines favor a log-plus-memtable write path: mutations append to a WAL, land in an in-memory memtable, then flush as immutable SSTables that are later merged by compaction. That design yields stronger ingest potential under heavy write load, but compaction and read amplification become first-class costs that must be capacity-planned and monitored.
 
 ```mermaid
 flowchart LR
@@ -106,53 +70,26 @@ flowchart LR
 
 ## 4. Consistency Semantics Across Models
 
-NoSQL designs often expose tunable or eventual consistency by default.
+NoSQL designs often expose tunable or eventual consistency by default. The architectural implication is that consistency is operation-specific and must be encoded by endpoint criticality rather than treated as a single cluster-wide constant.
 
-Key architecture implication:
-
-- consistency is operation-specific and must be encoded by endpoint criticality
-
-Examples:
-
-- social reaction write: eventual consistency acceptable
-- inventory reservation: stronger consistency required
+For example, a social reaction write can often tolerate eventual consistency because a briefly stale like count rarely harms the business, whereas an inventory reservation typically requires stronger consistency so two clients cannot claim the same unit.
 
 ---
 
 ## 5. When to Reject Relational-First Decisions
 
-Choose NoSQL-first when most conditions hold:
+Choose NoSQL-first when most of the following conditions hold: write volume and partition scale exceed the practical single-node relational operation envelope; the access pattern is strongly key or partition oriented; bounded inconsistency is acceptable for target workflows; and the domain model does not rely on frequent cross-entity relational joins under strict transactional invariants.
 
-1. write volume and partition scale exceed practical single-node relational operation envelope
-2. access pattern is strongly key or partition oriented
-3. bounded inconsistency is acceptable for target workflows
-4. domain model does not rely on frequent cross-entity relational joins under strict transactional invariants
-
-Reject NoSQL-first when:
-
-- strict cross-entity invariants dominate
-- ad-hoc relational querying is central to product behavior
-- team lacks maturity for eventual consistency reconciliation and repair operations
+Reject NoSQL-first when strict cross-entity invariants dominate the correctness model, when ad-hoc relational querying is central to product behavior, or when the team lacks maturity for eventual consistency reconciliation and repair operations. In those cases, relational engines remain the safer default until the workload evidence clearly justifies a model change.
 
 ---
 
 ## 6. Failure Modes by Model
 
-- key-value: hotspot keys, eviction policy surprise, replica lag
-- document: unbounded document growth, shard key drift
-- wide-column: tombstone pressure, compaction storms
-- graph: traversal explosion, cross-partition edge penalties
-
-Architects should document these risks explicitly in ADRs before committing to model adoption.
+Each model fails in characteristic ways that architects should document in ADRs before adoption. Key-value systems suffer hotspot keys, eviction-policy surprises, and replica lag that silently serve stale values. Document stores suffer unbounded document growth and shard-key drift that unbalanced partitions. Wide-column stores suffer tombstone pressure and compaction storms that spike latency under delete-heavy workloads. Graph systems suffer traversal explosion and cross-partition edge penalties that make deep walks unpredictable. Naming these risks early makes capacity, monitoring, and fallback design concrete rather than optimistic.
 
 ---
 
 ## 7. Decision Heuristic
 
-1. classify workload by dominant query shape
-2. classify invariants by criticality
-3. map model to storage and consistency behavior
-4. simulate failure and convergence behavior
-5. choose model that minimizes total correctness + latency + ops risk
-
-This process is repeatable and more reliable than preference-based selection.
+A repeatable selection process is more reliable than preference-based selection. First classify the workload by dominant query shape, then classify invariants by criticality. Map candidate models to storage and consistency behavior, simulate failure and convergence, and choose the model that minimizes total correctness, latency, and operational risk rather than maximizing novelty or vendor familiarity.

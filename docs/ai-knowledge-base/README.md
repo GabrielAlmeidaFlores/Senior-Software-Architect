@@ -31,4 +31,21 @@ Every AI-authored document in this knowledge base must follow a deep, explicit, 
 - Use Mermaid diagrams for complex flows and architecture relationships when helpful.
 - Use external references when they materially improve understanding.
 
+### No Shallow Noun-Only Bullet Lists
+
+Do not leave concepts as unexplained labels such as:
+
+- referential integrity
+- uniqueness constraints
+- ACID-C is invariant preservation
+
+Instead, write complete explanatory text for each idea covering:
+
+- what the concept is
+- how it works in this context
+- why it matters
+- what happens if it is ignored
+
+Bullet lists are allowed only when each bullet is already a full explanatory sentence or short paragraph. Prefer paragraphs over noun-phrase lists for examples, trade-offs, benefits, costs, and decision criteria.
+
 Depth should favor clarity over brevity. Long-form explanations are preferred when they improve reader understanding.
