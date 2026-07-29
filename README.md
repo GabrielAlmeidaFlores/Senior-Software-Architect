@@ -1,6 +1,6 @@
 # Senior Software Architect
 
-> A practical, production-grade knowledge repository for mastering software architecture with deep focus on database engineering and distributed systems decisions.
+> A practical, production-grade knowledge repository for mastering the full software engineering journey, one concept at a time, with architecture-level depth.
 
 ![Architecture](https://img.shields.io/badge/Focus-Software%20Architecture-0A66C2)
 ![Data](https://img.shields.io/badge/Focus-Database%20Engineering-1F883D)
@@ -11,25 +11,24 @@
 
 ## What This Repository Is
 
-This repository is a structured architecture masterclass designed to help engineers transition into **Senior Software Architect / Senior Data Architect** roles.
+This repository is a structured masterclass designed to help engineers transition into **Senior Software Architect / Senior Engineer** roles.
 
-It is not a simple notes collection. It is an opinionated, decision-driven knowledge base that emphasizes:
+It is not a simple notes collection. It is an evolving, decision-driven knowledge base that emphasizes:
 
-- distributed systems trade-offs
+- architecture and distributed systems trade-offs
 - database internals and selection criteria
-- operational excellence and reliability engineering
+- platform fundamentals (Linux, cloud, networking, reliability)
+- operational excellence and engineering decision-making
 - architecture communication through clear technical documentation
 
 ---
 
 ## What You Will Learn
 
-- How to reason about **CAP vs PACELC** under real failure conditions.
-- How to choose between **ACID and BASE** models using business invariants.
-- How major engines work internally (**PostgreSQL**, **MySQL InnoDB**, **MongoDB**, and more).
-- How to evaluate **NoSQL paradigms** (key-value, document, wide-column, graph, columnar) by workload.
-- How to design **polyglot persistence** architectures with explicit boundaries.
-- How to make architecture decisions with measurable criteria (latency, consistency, scalability, operational cost).
+- How to reason about architecture decisions using trade-offs, constraints, and measurable outcomes.
+- How to deeply understand database and distributed systems concepts (current focus).
+- How to connect low-level platform topics (Linux, cloud infrastructure, networking) to architecture outcomes (next phases).
+- How to build a long-term senior engineering mental model across domains, not only one stack.
 
 ---
 
@@ -52,7 +51,7 @@ It is not a simple notes collection. It is an opinionated, decision-driven knowl
 
 ---
 
-## Database Masterclass (Core Content)
+## Current Focus: Database Masterclass
 
 Main index:
 
@@ -64,6 +63,18 @@ Key domains:
 - **Relational Engines:** PostgreSQL internals, InnoDB architecture, direct comparison.
 - **NoSQL Paradigms:** taxonomy, MongoDB, columnar, key-value, graph.
 - **Decision Framework:** selection playbooks, operational excellence, production readiness.
+
+This is the current primary learning track. New tracks will be added incrementally.
+
+---
+
+## Planned Next Tracks
+
+- **Linux and Operating Systems for Engineers:** processes, memory, filesystems, networking, performance.
+- **Cloud Architecture:** compute, storage, networking, IAM, resilience, cost and governance.
+- **Platform and DevOps Foundations:** CI/CD, observability, incident response, security hardening.
+
+The repository follows a one-step-at-a-time strategy: deep focus on one domain, then expansion to the next.
 
 ---
 
@@ -112,4 +123,4 @@ flowchart TD
 
 - Foundational architecture blueprint available.
 - Database masterclass documentation actively maintained.
-- Repository is designed to evolve into a broader architecture curriculum over time.
+- Repository scope expanded to cover the complete software engineering path over time (including Linux and cloud).

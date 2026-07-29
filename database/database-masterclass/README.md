@@ -4,6 +4,8 @@
 
 This masterclass is a multi-document reference for senior-level database architecture, distributed consistency trade-offs, storage-engine internals, and production selection frameworks.
 
+This module is the **current phase** of the broader repository journey, which will later expand into Linux, cloud, and other core software engineering domains.
+
 ## Document Map
 
 ### 01 Theory and Foundations
@@ -41,3 +43,10 @@ Each domain document includes at least one Mermaid diagram to reinforce conceptu
 ## External Visual References
 
 For internet-based visual support and deeper exploration, documents include links to authoritative external resources and visual explainers where appropriate.
+
+## Position in the Repository Roadmap
+
+- Current phase: **Database and Distributed Data Systems**
+- Next planned phases: **Linux Fundamentals**, **Cloud Architecture**, **Platform Reliability**
+
+The intent is to build senior-level depth incrementally, one domain at a time, while preserving cross-links between topics.
