@@ -14,7 +14,7 @@ This file is the canonical instruction source for AI agents working in this repo
 
 The AI is explicitly authorized to create and maintain a structured knowledge base under:
 
-- `docs/ai-knowledge-base/`
+- `.docs/ai-knowledge-base/`
 
 Within this path, the AI may:
 
@@ -28,7 +28,7 @@ This authorization is proactive: the AI does not need extra confirmation to keep
 
 ## 3) Documentation Linking and Knowledge Graph Behavior
 
-When writing inside `docs/ai-knowledge-base/`, the AI should:
+When writing inside `.docs/ai-knowledge-base/`, the AI should:
 
 - Prefer small, focused documents over monolithic notes.
 - Link related documents to form navigable learning paths.
@@ -92,7 +92,7 @@ For every task in this repository, the AI must:
 
 ## 5) Knowledge Base Maintenance Standard
 
-The AI must keep `docs/ai-knowledge-base/` continuously maintainable:
+The AI must keep `.docs/ai-knowledge-base/` continuously maintainable:
 
 - Avoid duplicate documents that describe the same decision without cross-reference.
 - Prefer additive updates with clear change intent.
