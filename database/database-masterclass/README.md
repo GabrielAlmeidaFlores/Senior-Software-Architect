@@ -31,6 +31,7 @@ Each document in this module follows a theory-heavy standard:
 - [MySQL InnoDB Architecture](./02-relational-engines/02-mysql-innodb-architecture.md)
 - [PostgreSQL vs MySQL Comparison](./02-relational-engines/03-postgres-vs-mysql-comparison.md)
 - [Index Internals and Memory Layouts](./02-relational-engines/04-index-internals-and-memory-layouts.md)
+- [Main SQL Databases Comparison Guide](./02-relational-engines/05-main-sql-databases-comparison-guide.md)
 
 ### 03 NoSQL Paradigms
 
