@@ -11,6 +11,10 @@ This directory is reserved for AI-maintained project knowledge in Markdown forma
 - Design trade-off analyses
 - Glossaries and conceptual deep dives
 
+## Architecture Knowledge
+
+- [Database Sharding Masterclass Entry](./architecture/database-sharding-masterclass-entry.md) records the authoritative learning document, its source context, and related material without duplicating the technical analysis.
+
 ## Maintenance Rules
 
 - Keep all content in English.

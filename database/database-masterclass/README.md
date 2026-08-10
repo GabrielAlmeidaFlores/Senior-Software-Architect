@@ -24,6 +24,7 @@ Each document in this module follows a theory-heavy standard:
 - [ACID vs BASE Models](./01-theory-and-foundations/02-acid-vs-base-models.md)
 - [Consensus, 2PC, and Distributed Transactions](./01-theory-and-foundations/03-consensus-2pc-and-distributed-transactions.md)
 - [Quorum, Raft, and Paxos Internals](./01-theory-and-foundations/04-quorum-raft-paxos-internals.md)
+- [Sharding, Data Partitioning, and Horizontal Database Scale](./01-theory-and-foundations/05-sharding-data-partitioning-and-horizontal-scale.md)
 
 ### 02 Relational Engines
 
