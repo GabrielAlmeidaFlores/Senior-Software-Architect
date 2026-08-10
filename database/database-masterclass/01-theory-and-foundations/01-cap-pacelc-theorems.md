@@ -97,6 +97,31 @@ flowchart TD
 
 These are default tendencies, not immutable truths. Configuration and workload can shift practical behavior.
 
+### 5.0 Consistency–Availability Spectrum
+
+The chart below places major SQL and NoSQL systems on a partition-time spectrum: horizontal position reflects how readily the common default posture keeps serving under partition (availability-leaning continuity), and vertical position reflects how strongly that default posture prioritizes linearizable or majority-coordinated freshness (consistency). Positions are pedagogical defaults for orientation, not immutable brand laws. Tunable engines can move: Cassandra consistency level (CL), DynamoDB strong versus eventual reads, MongoDB read preference, and PostgreSQL/MySQL primary-versus-replica routing all shift practical placement. The CAP axes apply under partition; healthy-path latency versus consistency remains the PACELC else-branch already covered in sections 3 and 4. Read the table in this section and the caution in section 5.1 before treating any marker as a selection verdict.
+
+```mermaid
+quadrantChart
+    title Consistency vs Availability Spectrum under Partition
+    x-axis LowerServingContinuity --> HigherServingContinuity
+    y-axis WeakerDefaultConsistency --> StrongerDefaultConsistency
+    quadrant-1 HighA_StrongC_RareIdeal
+    quadrant-2 CP_Leaning
+    quadrant-3 LowA_WeakC_Uncommon
+    quadrant-4 AP_Leaning
+    Spanner: [0.22, 0.92]
+    CockroachDB: [0.28, 0.86]
+    PostgreSQL: [0.34, 0.80]
+    MySQLInnoDB: [0.38, 0.76]
+    MongoDB: [0.42, 0.70]
+    DynamoDB: [0.62, 0.48]
+    Cassandra: [0.78, 0.38]
+    Redis: [0.84, 0.28]
+```
+
+Spanner and CockroachDB sit in the CP-leaning region because default designs prefer majority coordination and refuse unsafe progress under partition. PostgreSQL and MySQL/InnoDB primary-write topologies likewise prefer consistency on the write owner, with availability for a given key depending on whether that primary remains reachable. MongoDB with majority writes follows a similar CP-leaning replica-set posture. DynamoDB sits toward the middle because strong and eventual read paths are both first-class and move the effective point per request. Cassandra and Redis sit further toward AP-leaning continuity in common default or cache-oriented deployments, while still remaining tunable or topology-dependent in production.
+
 | Database | Partition Tendency (P) | Else Tendency (E) | Typical Interpretation | Notes |
 |---|---|---|---|---|
 | Spanner | C over A | C over L | PC/EC | prioritizes external consistency with coordination cost |
@@ -105,6 +130,7 @@ These are default tendencies, not immutable truths. Configuration and workload c
 | DynamoDB | Tunable | Tunable | often PA/EL in default read paths | strong reads available per request |
 | MongoDB replica set | C over A for majority writes | mixed (C on primary, L on secondaries) | often PC/EC | read preference changes practical behavior |
 | PostgreSQL primary+replicas | C on primary writes | C/L depends on read routing | topology-dependent | not a native symmetric multi-primary design |
+| MySQL/InnoDB primary+replicas | C on primary writes | C/L depends on read routing and replication mode | topology-dependent | semi-sync or group replication can shift durability and failover posture |
 | Redis (sentinel + async replicas) | A-leaning continuity options | L-leaning serving | often PA/EL for cache use | depends heavily on durability requirements |
 
 ### 5.1 Why This Table Must Be Read with Caution
