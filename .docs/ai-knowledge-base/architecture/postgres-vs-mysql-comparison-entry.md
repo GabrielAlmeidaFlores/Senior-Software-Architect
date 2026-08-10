@@ -12,7 +12,11 @@ This entry points to the authoritative comparison document in the database maste
 
 - [PostgreSQL Deep Dive](../../../database/database-masterclass/02-relational-engines/01-postgresql-deep-dive.md)
 - [MySQL InnoDB Architecture](../../../database/database-masterclass/02-relational-engines/02-mysql-innodb-architecture.md)
+- [Index Internals and Memory Layouts](../../../database/database-masterclass/02-relational-engines/04-index-internals-and-memory-layouts.md)
 - [Sharding, Data Partitioning, and Horizontal Database Scale](../../../database/database-masterclass/01-theory-and-foundations/05-sharding-data-partitioning-and-horizontal-scale.md)
+- [PostgreSQL Deep Dive Entry](./postgresql-deep-dive-entry.md)
+- [MySQL InnoDB Architecture Entry](./mysql-innodb-architecture-entry.md)
+- [Index Internals Masterclass Entry](./index-internals-masterclass-entry.md)
 
 ## Decision Summary (Non-Substitutive)
 

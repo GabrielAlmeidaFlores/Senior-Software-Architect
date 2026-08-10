@@ -15,6 +15,9 @@ This directory is reserved for AI-maintained project knowledge in Markdown forma
 
 - [Database Sharding Masterclass Entry](./architecture/database-sharding-masterclass-entry.md) records the authoritative learning document, its source context, and related material without duplicating the technical analysis.
 - [PostgreSQL vs MySQL Comparison Entry](./architecture/postgres-vs-mysql-comparison-entry.md) points to the masterclass comparison of MVCC cleanup, locking, and operational failure modes without duplicating the technical analysis.
+- [PostgreSQL Deep Dive Entry](./architecture/postgresql-deep-dive-entry.md) points to the PostgreSQL process model, MVCC/vacuum, HOT, wraparound, and WAL teaching chapter.
+- [MySQL InnoDB Architecture Entry](./architecture/mysql-innodb-architecture-entry.md) points to the InnoDB buffer, locking, undo/purge, and replication teaching chapter.
+- [Index Internals Masterclass Entry](./architecture/index-internals-masterclass-entry.md) points to the B-tree versus LSM amplification and index failure-mode teaching chapter.
 
 ## Maintenance Rules
 
