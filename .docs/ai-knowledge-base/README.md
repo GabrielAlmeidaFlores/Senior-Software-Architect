@@ -14,6 +14,7 @@ This directory is reserved for AI-maintained project knowledge in Markdown forma
 ## Architecture Knowledge
 
 - [Database Sharding Masterclass Entry](./architecture/database-sharding-masterclass-entry.md) records the authoritative learning document, its source context, and related material without duplicating the technical analysis.
+- [PostgreSQL vs MySQL Comparison Entry](./architecture/postgres-vs-mysql-comparison-entry.md) points to the masterclass comparison of MVCC cleanup, locking, and operational failure modes without duplicating the technical analysis.
 
 ## Maintenance Rules
 
